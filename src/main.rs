@@ -1,13 +1,12 @@
 use std::{fmt::Debug, ops::{AddAssign, Mul, Range}, time::Instant};
-
 use rustfft::{num_complex::{Complex, Complex32, Complex64, ComplexFloat}, num_traits::{float::FloatCore, zero, Float, FromPrimitive, Signed, Zero}, FftPlannerAvx};
-
+use rayon::prelude::*;
 
 fn main() {
 
-    let n = 420;
+    let n = 788;
 
-    let ny = 256*256;
+    let ny = 480*480;
 
     let wavelet = Wavelet::<f64>::db2();
     let mut wavedec = WaveDecPlanner::new(n,4,wavelet);
@@ -26,10 +25,19 @@ fn main() {
     let now = Instant::now();
 
 
-    for (stride,result) in strides.iter_mut().zip(results.iter_mut()) {
-        wavedec.process(stride,result);
-        waverec.process(result,stride);
-    }
+    strides.par_chunks_mut(1000).zip(results.par_chunks_mut(1000)).for_each(|(s,r)|{
+        let mut wavedec = WaveDecPlanner::new(n,4,Wavelet::<f64>::db2());
+        let mut waverec = WaveRecPlanner::new(&wavedec);
+        for (stride,result) in s.iter_mut().zip(r.iter_mut()) {
+            wavedec.process(stride,result);
+            waverec.process(result,stride);
+        }
+    });
+
+    // for (stride,result) in strides.iter_mut().zip(results.iter_mut()) {
+    //     wavedec.process(stride,result);
+    //     waverec.process(result,stride);
+    // }
 
     let dur = now.elapsed();
 
