@@ -5,21 +5,35 @@ use rustfft::{num_complex::{Complex, Complex32, Complex64, ComplexFloat}, num_tr
 
 fn main() {
 
-    let n = 200;
-    let x:Vec<Complex32> = (1..(n+1)).into_iter().map(|x| Complex32::new(x as f32,0.)).collect();
-    let wavelet = Wavelet::db2();
+    let n = 420;
 
-    let mut wavedec = WaveDecPlanner::new(x.len(),3,wavelet);
+    let ny = 256*256;
+
+    let wavelet = Wavelet::<f64>::db2();
+    let mut wavedec = WaveDecPlanner::new(n,4,wavelet);
     let mut waverec = WaveRecPlanner::new(&wavedec);
+
+    let mut strides = vec![];
+    let mut results = vec![];
+    for _ in 0..ny {
+        let x:Vec<Complex64> = (1..(n+1)).into_iter().map(|x| Complex64::new(x as f64,1.)).collect();
+        strides.push(x);
+        results.push(
+            vec![Complex64::zero();wavedec.decomp_length]
+        )
+    }
 
     let now = Instant::now();
 
-    let decomp = wavedec.process(&x);
-    let rec = waverec.process(&decomp);
+
+    for (stride,result) in strides.iter_mut().zip(results.iter_mut()) {
+        wavedec.process(stride,result);
+        waverec.process(result,stride);
+    }
 
     let dur = now.elapsed();
 
-    println!("{:#?}",rec);
+    println!("{:#?}",strides.last().unwrap());
     println!("elapsed: {} ms", dur.as_millis());
 }
 
@@ -67,6 +81,7 @@ pub struct Wavelet<T> {
 
 pub struct WaveDecPlanner<T> {
     signal_length:usize,
+    decomp_length:usize,
     levels:Vec<usize>,
     xforms:Vec<WaveletXForm1D<T>>,
     wavelet: Wavelet<T>,
@@ -98,6 +113,7 @@ where T: FromPrimitive + Copy + Signed + Sync + Send + Debug + 'static {
 
         Self {
             signal_length,
+            decomp_length: decomp_len,
             levels: levels,
             xforms,
             wavelet,
@@ -106,7 +122,7 @@ where T: FromPrimitive + Copy + Signed + Sync + Send + Debug + 'static {
         }
     }
 
-    pub fn process(&mut self,signal:&[Complex<T>]) -> Vec<Complex<T>> {
+    pub fn process(&mut self,signal:&[Complex<T>],result:&mut [Complex<T>]) {
         let mut stop = self.decomp_buffer.len();
 
         let lo_d = &self.wavelet.lo_d;
@@ -126,7 +142,9 @@ where T: FromPrimitive + Copy + Signed + Sync + Send + Debug + 'static {
 
         //println!("decomp = {:#?}",self.decomp_buffer);
 
-        self.decomp_buffer.clone()
+        result.copy_from_slice(&self.decomp_buffer);
+
+        //self.decomp_buffer.clone()
 
     }   
 }
@@ -169,7 +187,7 @@ where T: FromPrimitive + Copy + Signed + Sync + Send + Debug + 'static {
         }
     }
 
-    pub fn process(&mut self,decomposed:&[Complex<T>]) -> Vec<Complex<T>> {
+    pub fn process(&mut self,decomposed:&[Complex<T>],result:&mut [Complex<T>]) {
         self.approx_buffer[0..self.levels[0]].copy_from_slice(&decomposed[0..self.levels[0]]);
         let lo_r = &self.wavelet.lo_r;
         let hi_r = &self.wavelet.hi_r;
@@ -178,8 +196,10 @@ where T: FromPrimitive + Copy + Signed + Sync + Send + Debug + 'static {
             let detail = &decomposed[start..(start + *n_coeffs)];
             start += *n_coeffs;
             w.reconstruct(&self.approx_buffer[0..*n_coeffs], detail, lo_r, hi_r, &mut self.signal_buffer[0..*sig_len]);
-            self.approx_buffer[0..*sig_len].copy_from_slice(&self.signal_buffer[0..*sig_len]);        }
-        self.signal_buffer.clone()
+            self.approx_buffer[0..*sig_len].copy_from_slice(&self.signal_buffer[0..*sig_len]);
+        }
+        //self.signal_buffer.clone()
+        result.copy_from_slice(&self.signal_buffer);
     }
 
 }
