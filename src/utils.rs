@@ -5,11 +5,11 @@ use std::{fmt::Debug, ops::Range};
 
 /// Performs a direct convolution of the input with the kernel. The length of the result is:
 /// input.len() + kernel.len() - 1
-pub fn conv_direct<T>(input: &[T], kernel: &[T], result: &mut [T])
+pub fn conv_direct<T>(input: &[Complex<T>], kernel: &[T], result: &mut [Complex<T>])
 where
     T: FromPrimitive + Copy + Signed + Sync + Send + Debug + 'static,
 {
-    result.iter_mut().for_each(|x| *x = T::zero());
+    result.iter_mut().for_each(|x| *x = Complex::<T>::zero());
 
     let input_len = input.len();
     let kernel_len = kernel.len();
@@ -25,7 +25,7 @@ where
 }
 
 /// Downsamples the signal by removing every odd index
-pub fn downsample2<T>(sig: &[T], downsampled: &mut [T])
+pub fn downsample2<T>(sig: &[Complex<T>], downsampled: &mut [Complex<T>])
 where
     T: FromPrimitive + Copy + Signed + Sync + Send + Debug + 'static,
 {
@@ -36,11 +36,11 @@ where
 }
 
 /// Upsamples the signal by inserting 0s every odd index
-pub fn upsample_odd<T>(sig: &[T], upsampled: &mut [T])
+pub fn upsample_odd<T>(sig: &[Complex<T>], upsampled: &mut [Complex<T>])
 where
     T: FromPrimitive + Copy + Signed + Sync + Send + Debug + 'static,
 {
-    upsampled.iter_mut().for_each(|x| *x = T::zero());
+    upsampled.iter_mut().for_each(|x| *x = Complex::<T>::zero());
     sig.iter().enumerate().for_each(|(idx, x)| {
         upsampled[2 * idx] = *x;
     })
@@ -48,7 +48,7 @@ where
 
 /// Pads the signal array with symmetric boundaries of length a. The result array is:
 /// sig.len() + 2 * a
-pub fn symm_ext<T>(sig: &[T], a: usize, oup: &mut [T])
+pub fn symm_ext<T>(sig: &[Complex<T>], a: usize, oup: &mut [Complex<T>])
 where
     T: FromPrimitive + Copy + Signed + Sync + Send + Debug + 'static,
 {
@@ -72,14 +72,14 @@ where
 
 /// Pads the signal array with periodic boundaries of length a. The result array is:
 /// sig.len() + 2 * a
-pub fn per_ext<T>(sig: &[T], a: usize, oup: &mut [T])
+pub fn per_ext<T>(sig: &[Complex<T>], a: usize, oup: &mut [Complex<T>])
 where
     T: FromPrimitive + Copy + Signed + Sync + Send + Debug + 'static,
 {
     let len = sig.len();
     let mut len2 = len;
-    let mut temp1 = T::zero();
-    let mut temp2 = T::zero();
+    let mut temp1 = Complex::<T>::zero();
+    let mut temp2 = Complex::<T>::zero();
 
     for i in 0..len {
         oup[a + i] = sig[i];

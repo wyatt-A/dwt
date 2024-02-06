@@ -25,12 +25,12 @@ fn test() {
     let mut strides = vec![];
     let mut results = vec![];
     for _ in 0..ny {
-        let x: Vec<f32> = (1..(n + 1))
+        let x: Vec<Complex32> = (1..(n + 1))
             .into_iter()
-            .map(|x| x as f32)
+            .map(|x| Complex32::new(x as f32,0.))
             .collect();
         strides.push(x);
-        results.push(vec![f32::zero(); wavedec.decomp_len()])
+        results.push(vec![Complex32::zero(); wavedec.decomp_len()])
     }
 
     let now = Instant::now();
@@ -56,14 +56,14 @@ fn test() {
 #[test]
 fn test3(){
     let n = 20;
-    let x:Vec<f64> = (1..(n+1)).into_iter().map(|x| x as f64).collect();
+    let x:Vec<Complex64> = (1..(n+1)).into_iter().map(|x| Complex64::new(x as f64,0.)).collect();
     let wavelet = Wavelet::<f64>::new(WaveletType::Daubechies2);
 
     let mut wavedec = WaveDecPlanner::<f64>::new(n, 3, wavelet);
     let mut waverec = WaveRecPlanner::<f64>::new(&wavedec);
 
-    let mut result = vec![f64::zero();wavedec.decomp_len()];
-    let mut recon = vec![f64::zero();x.len()];
+    let mut result = vec![Complex64::zero();wavedec.decomp_len()];
+    let mut recon = vec![Complex64::zero();x.len()];
 
     wavedec.process(&x, &mut result);
     waverec.process(&result, &mut recon);
@@ -77,7 +77,7 @@ fn test2(){
 
     let n = 20;
 
-    let x:Vec<f64> = (1..(n+1)).into_iter().map(|x| x as f64).collect();
+    let x:Vec<Complex64> = (1..(n+1)).into_iter().map(|x| Complex64::new(x as f64,0.)).collect();
 
     let lo_d = [
         -0.1294095225509214464043594716713414527475833892822265625,
@@ -128,7 +128,7 @@ fn test2(){
     println!("decomp_len = {}",decomp_len);
     //let mut signal = x.to_owned();
     let mut stop = decomp_len;
-    let mut decomp = vec![f64::zero();decomp_len];
+    let mut decomp = vec![Complex64::zero();decomp_len];
 
     let mut signal = decomp.clone();
     decomp[0..x.len()].copy_from_slice(&x);
@@ -148,8 +148,8 @@ fn test2(){
     // initialization
     // inputs are decomp and levels
     let mut start = levels[1];
-    let mut signal = vec![f64::zero();x.len()];
-    let mut approx = vec![f64::zero();x.len()];
+    let mut signal = vec![Complex64::zero();x.len()];
+    let mut approx = vec![Complex64::zero();x.len()];
     let mut xforms:Vec<_> = levels[1..].windows(2).map(|x| {
         (
             x[0], // number of approx coeffs
