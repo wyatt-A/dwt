@@ -15,8 +15,8 @@ pub struct WaveDecPlanner<T> {
     levels: Vec<usize>,
     xforms: Vec<WaveletXForm1D<T>>,
     wavelet: Wavelet<T>,
-    decomp_buffer: Vec<Complex<T>>,
-    signal_buffer: Vec<Complex<T>>,
+    decomp_buffer: Vec<T>,
+    signal_buffer: Vec<T>,
 }
 
 impl<T> WaveDecPlanner<T>
@@ -39,7 +39,7 @@ where
         let mut decomp_len = xforms.iter().fold(0, |acc, x| acc + x.coeff_len);
         decomp_len += xforms.last().unwrap().coeff_len;
 
-        let decomp = vec![Complex::<T>::zero(); decomp_len];
+        let decomp = vec![T::zero(); decomp_len];
         let signal = decomp.clone();
 
         Self {
@@ -57,7 +57,7 @@ where
         self.decomp_length
     }
 
-    pub fn process(&mut self, signal: &[Complex<T>], result: &mut [Complex<T>]) {
+    pub fn process(&mut self, signal: &[T], result: &mut [T]) {
         let mut stop = self.decomp_buffer.len();
 
         let lo_d = &self.wavelet.lo_d();
@@ -92,8 +92,8 @@ pub struct WaveRecPlanner<T> {
     levels: Vec<usize>,
     xforms: Vec<(usize, usize, WaveletXForm1D<T>)>,
     signal_length: usize,
-    signal_buffer: Vec<Complex<T>>,
-    approx_buffer: Vec<Complex<T>>,
+    signal_buffer: Vec<T>,
+    approx_buffer: Vec<T>,
     wavelet: Wavelet<T>,
 }
 
@@ -104,8 +104,8 @@ where
     pub fn new(dec_planner: &WaveDecPlanner<T>) -> Self {
         let levels = dec_planner.levels.to_owned();
         let signal_length = dec_planner.signal_length;
-        let signal = vec![Complex::<T>::zero(); signal_length];
-        let approx = vec![Complex::<T>::zero(); signal_length];
+        let signal = vec![T::zero(); signal_length];
+        let approx = vec![T::zero(); signal_length];
         let xforms: Vec<_> = levels[1..]
             .windows(2)
             .map(|x| {
@@ -126,7 +126,7 @@ where
         }
     }
 
-    pub fn process(&mut self, decomposed: &[Complex<T>], result: &mut [Complex<T>]) {
+    pub fn process(&mut self, decomposed: &[T], result: &mut [T]) {
         self.approx_buffer[0..self.levels[0]].copy_from_slice(&decomposed[0..self.levels[0]]);
         let lo_r = self.wavelet.lo_r();
         let hi_r = self.wavelet.hi_r();
@@ -173,17 +173,17 @@ pub struct WaveletXForm1D<T> {
     decomp_conv_valid_lidx: usize,
     decomp_conv_valid_uidx: usize,
 
-    decomp_scratch1: Vec<Complex<T>>,
-    decomp_scratch2: Vec<Complex<T>>,
-    decomp_scratch3: Vec<Complex<T>>,
-    decomp_scratch4: Vec<Complex<T>>,
+    decomp_scratch1: Vec<T>,
+    decomp_scratch2: Vec<T>,
+    decomp_scratch3: Vec<T>,
+    decomp_scratch4: Vec<T>,
 
-    recon_scratch1: Vec<Complex<T>>,
-    recon_scratch2: Vec<Complex<T>>,
-    recon_scratch3: Vec<Complex<T>>,
-    recon_scratch4: Vec<Complex<T>>,
+    recon_scratch1: Vec<T>,
+    recon_scratch2: Vec<T>,
+    recon_scratch3: Vec<T>,
+    recon_scratch4: Vec<T>,
 
-    recon_upsample_scratch: Vec<Complex<T>>,
+    recon_upsample_scratch: Vec<T>,
 }
 
 impl<T> WaveletXForm1D<T>
@@ -215,15 +215,15 @@ where
             recon_conv_center_uidx: conv_center.1,
             decomp_conv_valid_lidx: decomp_conv_valid.0,
             decomp_conv_valid_uidx: decomp_conv_valid.1,
-            decomp_scratch1: vec![Complex::<T>::zero(); decomp_conv_len],
-            decomp_scratch2: vec![Complex::<T>::zero(); decomp_conv_len],
-            decomp_scratch3: vec![Complex::<T>::zero(); decomp_conv_len],
-            decomp_scratch4: vec![Complex::<T>::zero(); decomp_conv_len],
-            recon_scratch1: vec![Complex::<T>::zero(); recon_conv_len],
-            recon_scratch2: vec![Complex::<T>::zero(); recon_conv_len],
-            recon_scratch3: vec![Complex::<T>::zero(); recon_conv_len],
-            recon_scratch4: vec![Complex::<T>::zero(); recon_conv_len],
-            recon_upsample_scratch: vec![Complex::<T>::zero(); upsamp_len],
+            decomp_scratch1: vec![T::zero(); decomp_conv_len],
+            decomp_scratch2: vec![T::zero(); decomp_conv_len],
+            decomp_scratch3: vec![T::zero(); decomp_conv_len],
+            decomp_scratch4: vec![T::zero(); decomp_conv_len],
+            recon_scratch1: vec![T::zero(); recon_conv_len],
+            recon_scratch2: vec![T::zero(); recon_conv_len],
+            recon_scratch3: vec![T::zero(); recon_conv_len],
+            recon_scratch4: vec![T::zero(); recon_conv_len],
+            recon_upsample_scratch: vec![T::zero(); upsamp_len],
         }
     }
 
@@ -235,20 +235,20 @@ where
         self.decomp_len
     }
 
-    pub fn decomp_buffer(&self) -> Vec<Complex<T>> {
-        vec![Complex::<T>::zero(); self.decomp_len]
+    pub fn decomp_buffer(&self) -> Vec<T> {
+        vec![T::zero(); self.decomp_len]
     }
 
-    pub fn recon_buffer(&self, sig_len: usize) -> Vec<Complex<T>> {
-        vec![Complex::<T>::zero(); sig_len]
+    pub fn recon_buffer(&self, sig_len: usize) -> Vec<T> {
+        vec![T::zero(); sig_len]
     }
 
     pub fn decompose(
         &mut self,
-        signal: &[Complex<T>],
+        signal: &[T],
         lo_d: &[T],
         hi_d: &[T],
-        decomp: &mut [Complex<T>],
+        decomp: &mut [T],
     ) {
         symm_ext(signal, self.decomp_ext_len, &mut self.decomp_scratch1);
         //conv1d(&self.decomp_scratch1[0..self.decomp_ext_result_len], lo_d,&mut self.decomp_scratch3,&mut self.decomp_scratch4, &mut self.decomp_scratch2);
@@ -276,11 +276,11 @@ where
 
     pub fn reconstruct(
         &mut self,
-        approx: &[Complex<T>],
-        detail: &[Complex<T>],
+        approx: &[T],
+        detail: &[T],
         lo_r: &[T],
         hi_r: &[T],
-        signal: &mut [Complex<T>],
+        signal: &mut [T],
     ) {
         let conv_center = conv_center(self.recon_conv_len, signal.len());
         upsample_odd(approx, &mut self.recon_upsample_scratch);

@@ -5,11 +5,11 @@ use std::{fmt::Debug, ops::Range};
 
 /// Performs a direct convolution of the input with the kernel. The length of the result is:
 /// input.len() + kernel.len() - 1
-pub fn conv_direct<T>(input: &[Complex<T>], kernel: &[T], result: &mut [Complex<T>])
+pub fn conv_direct<T>(input: &[T], kernel: &[T], result: &mut [T])
 where
     T: FromPrimitive + Copy + Signed + Sync + Send + Debug + 'static,
 {
-    result.iter_mut().for_each(|x| *x = Complex::<T>::zero());
+    result.iter_mut().for_each(|x| *x = T::zero());
 
     let input_len = input.len();
     let kernel_len = kernel.len();
@@ -25,7 +25,7 @@ where
 }
 
 /// Downsamples the signal by removing every odd index
-pub fn downsample2<T>(sig: &[Complex<T>], downsampled: &mut [Complex<T>])
+pub fn downsample2<T>(sig: &[T], downsampled: &mut [T])
 where
     T: FromPrimitive + Copy + Signed + Sync + Send + Debug + 'static,
 {
@@ -36,11 +36,11 @@ where
 }
 
 /// Upsamples the signal by inserting 0s every odd index
-pub fn upsample_odd<T>(sig: &[Complex<T>], upsampled: &mut [Complex<T>])
+pub fn upsample_odd<T>(sig: &[T], upsampled: &mut [T])
 where
     T: FromPrimitive + Copy + Signed + Sync + Send + Debug + 'static,
 {
-    upsampled.iter_mut().for_each(|x| *x = Complex::<T>::zero());
+    upsampled.iter_mut().for_each(|x| *x = T::zero());
     sig.iter().enumerate().for_each(|(idx, x)| {
         upsampled[2 * idx] = *x;
     })
@@ -48,7 +48,7 @@ where
 
 /// Pads the signal array with symmetric boundaries of length a. The result array is:
 /// sig.len() + 2 * a
-pub fn symm_ext<T>(sig: &[Complex<T>], a: usize, oup: &mut [Complex<T>])
+pub fn symm_ext<T>(sig: &[T], a: usize, oup: &mut [T])
 where
     T: FromPrimitive + Copy + Signed + Sync + Send + Debug + 'static,
 {
@@ -72,14 +72,14 @@ where
 
 /// Pads the signal array with periodic boundaries of length a. The result array is:
 /// sig.len() + 2 * a
-pub fn per_ext<T>(sig: &[Complex<T>], a: usize, oup: &mut [Complex<T>])
+pub fn per_ext<T>(sig: &[T], a: usize, oup: &mut [T])
 where
     T: FromPrimitive + Copy + Signed + Sync + Send + Debug + 'static,
 {
     let len = sig.len();
     let mut len2 = len;
-    let mut temp1 = Complex::<T>::zero();
-    let mut temp2 = Complex::<T>::zero();
+    let mut temp1 = T::zero();
+    let mut temp2 = T::zero();
 
     for i in 0..len {
         oup[a + i] = sig[i];
@@ -123,50 +123,50 @@ pub fn conv_center(sig_len: usize, center_len: usize) -> (usize, usize) {
 /// 1-D convolution based on the fast fourier transform. Buffers for the fft are explicitly passed and must be the same size
 /// as the result buffer. The size of the result buffer needs to be :
 ///  signal.len() + filter.len() - 1
-pub fn conv1d<T>(
-    signal: &[Complex<T>],
-    filter: &[T],
-    s_buff1: &mut [Complex<T>],
-    s_buff2: &mut [Complex<T>],
-    result: &mut [Complex<T>],
-) where
-    T: FromPrimitive + Copy + Signed + Sync + Send + Debug + 'static,
-{
-    let n = result.len();
+// pub fn conv1d<T>(
+//     signal: &[T],
+//     filter: &[T],
+//     s_buff1: &mut [T],
+//     s_buff2: &mut [T],
+//     result: &mut [T],
+// ) where
+//     T: FromPrimitive + Copy + Signed + Sync + Send + Debug + 'static,
+// {
+//     let n = result.len();
 
-    s_buff1.iter_mut().for_each(|x| *x = Complex::<T>::zero());
-    s_buff2.iter_mut().for_each(|x| *x = Complex::<T>::zero());
+//     s_buff1.iter_mut().for_each(|x| *x = T::zero());
+//     s_buff2.iter_mut().for_each(|x| *x = T::zero());
 
-    s_buff1.iter_mut().zip(signal.iter()).for_each(|(x, s)| {
-        *x = *s;
-    });
+//     s_buff1.iter_mut().zip(signal.iter()).for_each(|(x, s)| {
+//         *x = *s;
+//     });
 
-    s_buff2.iter_mut().zip(filter.iter()).for_each(|(x, f)| {
-        *x = Complex::<T>::new(*f, T::zero());
-    });
+//     s_buff2.iter_mut().zip(filter.iter()).for_each(|(x, f)| {
+//         *x = *f
+//     });
 
-    let mut fp = FftPlannerAvx::new().unwrap();
-    let fft = fp.plan_fft_forward(n);
-    let ifft = fp.plan_fft_inverse(n);
-    fft.process(s_buff1);
-    fft.process(s_buff2);
+//     let mut fp = FftPlannerAvx::new().unwrap();
+//     let fft = fp.plan_fft_forward(n);
+//     let ifft = fp.plan_fft_inverse(n);
+//     fft.process(s_buff1);
+//     fft.process(s_buff2);
 
-    s_buff1
-        .into_iter()
-        .zip(s_buff2.into_iter())
-        .zip(result.iter_mut())
-        .for_each(|((x, y), r)| {
-            *r = *x * *y;
-        });
+//     s_buff1
+//         .into_iter()
+//         .zip(s_buff2.into_iter())
+//         .zip(result.iter_mut())
+//         .for_each(|((x, y), r)| {
+//             *r = *x * *y;
+//         });
 
-    ifft.process(result);
+//     ifft.process(result);
 
-    let scale = T::one() / T::from_usize(n).unwrap();
+//     let scale = T::one() / T::from_usize(n).unwrap();
 
-    result.iter_mut().for_each(|x| {
-        *x = *x * scale;
-    })
-}
+//     result.iter_mut().for_each(|x| {
+//         *x = *x * scale;
+//     })
+// }
 
 /// Retuns the length of the resulting convolution given the signal length and the filter length
 pub fn conv_len(sig_len: usize, filt_len: usize) -> usize {
