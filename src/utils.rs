@@ -1,7 +1,16 @@
 use num_complex::Complex;
 use num_traits::{FromPrimitive, Signed, Zero};
 use rustfft::FftPlannerAvx;
-use std::{fmt::Debug, ops::Range};
+use std::{f64::consts::SQRT_2, fmt::Debug, ops::Range};
+
+
+/// Returns the maximum number of wavelet decomposition levels to avoid boundary effects
+pub fn w_max_level(sig_len:usize,filt_len:usize) -> usize {
+    if filt_len <= 1 {
+        return 0
+    }
+    (sig_len as f32 / (filt_len as f32 - 1.)).log2() as usize
+}
 
 /// Performs a direct convolution of the input with the kernel. The length of the result is:
 /// input.len() + kernel.len() - 1
@@ -40,6 +49,10 @@ pub fn upsample_odd<T>(sig: &[Complex<T>], upsampled: &mut [Complex<T>])
 where
     T: FromPrimitive + Copy + Signed + Sync + Send + Debug + 'static,
 {
+
+    //println!("sig length: {}",sig.len());
+    //println!("upsample length: {}",upsampled.len());
+
     upsampled.iter_mut().for_each(|x| *x = Complex::<T>::zero());
     sig.iter().enumerate().for_each(|(idx, x)| {
         upsampled[2 * idx] = *x;

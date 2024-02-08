@@ -30,6 +30,7 @@ where
     fn hi_d(&self) -> &[T];
     fn lo_r(&self) -> &[T];
     fn hi_r(&self) -> &[T];
+    fn filt_len(&self) -> usize;
 }
 
 impl<T> WaveletFilter<T> for Wavelet<T>
@@ -50,6 +51,10 @@ where
 
     fn hi_r(&self) -> &[T] {
         &self.hi_r
+    }
+
+    fn filt_len(&self) -> usize {
+        self.lo_d.len()
     }
 }
 

@@ -24,6 +24,9 @@ where
     T: FromPrimitive + Copy + Signed + Sync + Send + Debug + 'static,
 {
     pub fn new(signal_length: usize, n_levels: usize, wavelet: Wavelet<T>) -> Self {
+        if n_levels < 1 {
+            panic!("number of levels must be 1 or more");
+        }
         let mut levels = vec![0; n_levels + 2];
         levels[n_levels + 1] = signal_length;
         let mut xforms = vec![];
@@ -106,13 +109,14 @@ where
         let signal_length = dec_planner.signal_length;
         let signal = vec![Complex::<T>::zero(); signal_length];
         let approx = vec![Complex::<T>::zero(); signal_length];
+        let filt_len = dec_planner.wavelet.filt_len();
         let xforms: Vec<_> = levels[1..]
             .windows(2)
             .map(|x| {
                 (
                     x[0],                              // number of approx coeffs
                     x[1],                              // signal length to reconstruct
-                    WaveletXForm1D::<T>::new(x[1], 4), // wavelet transform handler
+                    WaveletXForm1D::<T>::new(x[1], filt_len), // wavelet transform handler
                 )
             })
             .collect();
