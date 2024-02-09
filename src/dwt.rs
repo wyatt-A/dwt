@@ -6,8 +6,9 @@ use crate::{
     wavelet::{Wavelet, WaveletFilter},
 };
 use num_complex::Complex;
-use num_traits::{FromPrimitive, Signed, Zero};
-use std::fmt::Debug;
+use num_traits::{Float, FromPrimitive, Signed, Zero};
+use rayon::iter::{IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator};
+use std::{fmt::Debug, iter::Sum};
 
 pub struct WaveDecPlanner<T> {
     signal_length: usize,
@@ -21,7 +22,7 @@ pub struct WaveDecPlanner<T> {
 
 impl<T> WaveDecPlanner<T>
 where
-    T: FromPrimitive + Copy + Signed + Sync + Send + Debug + 'static,
+    T: FromPrimitive + Copy + Signed + Sync + Send + Debug + 'static + Sum<T> + Float,
 {
     pub fn new(signal_length: usize, n_levels: usize, wavelet: Wavelet<T>) -> Self {
         if n_levels < 1 {
@@ -61,6 +62,9 @@ where
     }
 
     pub fn process(&mut self, signal: &[Complex<T>], result: &mut [Complex<T>]) {
+
+        let signal_energy = signal.par_iter().map(|x|x.norm_sqr()).sum::<T>();
+        
         let mut stop = self.decomp_buffer.len();
 
         let lo_d = &self.wavelet.lo_d();
@@ -87,6 +91,12 @@ where
 
         result.copy_from_slice(&self.decomp_buffer);
 
+        let result_energy = result.par_iter().map(|x|x.norm_sqr()).sum::<T>();
+
+        let scale = (signal_energy / result_energy).sqrt();
+
+        result.par_iter_mut().for_each(|x| *x = *x * scale);
+
         //self.decomp_buffer.clone()
     }
 }
@@ -102,7 +112,7 @@ pub struct WaveRecPlanner<T> {
 
 impl<T> WaveRecPlanner<T>
 where
-    T: FromPrimitive + Copy + Signed + Sync + Send + Debug + 'static,
+    T: FromPrimitive + Copy + Signed + Sync + Send + Debug + 'static + Sum<T> + Float,
 {
     pub fn new(dec_planner: &WaveDecPlanner<T>) -> Self {
         let levels = dec_planner.levels.to_owned();
@@ -131,6 +141,9 @@ where
     }
 
     pub fn process(&mut self, decomposed: &[Complex<T>], result: &mut [Complex<T>]) {
+
+        let decomp_energy = decomposed.par_iter().map(|x|x.norm_sqr()).sum::<T>();
+
         self.approx_buffer[0..self.levels[0]].copy_from_slice(&decomposed[0..self.levels[0]]);
         let lo_r = self.wavelet.lo_r();
         let hi_r = self.wavelet.hi_r();
@@ -149,6 +162,12 @@ where
         }
         //self.signal_buffer.clone()
         result.copy_from_slice(&self.signal_buffer);
+
+        let result_energy = result.par_iter().map(|x|x.norm_sqr()).sum::<T>();
+
+        let scale = (decomp_energy / result_energy).sqrt();
+
+        result.par_iter_mut().for_each(|x| *x = *x * scale);
     }
 }
 
@@ -303,4 +322,12 @@ where
             *x = a[idx] + d[idx];
         });
     }
+}
+
+/// Returns the maximum number of wavelet decomposition levels to avoid boundary effects
+pub fn w_max_level(sig_len:usize,filt_len:usize) -> usize {
+    if filt_len <= 1 {
+        return 0
+    }
+    (sig_len as f32 / (filt_len as f32 - 1.)).log2() as usize
 }

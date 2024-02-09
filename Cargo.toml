@@ -10,3 +10,10 @@ num-complex = "0.4.4"
 num-traits = "0.2.17"
 rayon = "1.8.1"
 rustfft = "6.2.0"
+
+[dev-dependencies]
+criterion = "0.3.0"
+
+[[bench]]
+name = "dwt_benchmark"
+harness = false

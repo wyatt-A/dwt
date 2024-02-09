@@ -4,14 +4,6 @@ use rustfft::FftPlannerAvx;
 use std::{f64::consts::SQRT_2, fmt::Debug, ops::Range};
 
 
-/// Returns the maximum number of wavelet decomposition levels to avoid boundary effects
-pub fn w_max_level(sig_len:usize,filt_len:usize) -> usize {
-    if filt_len <= 1 {
-        return 0
-    }
-    (sig_len as f32 / (filt_len as f32 - 1.)).log2() as usize
-}
-
 /// Performs a direct convolution of the input with the kernel. The length of the result is:
 /// input.len() + kernel.len() - 1
 pub fn conv_direct<T>(input: &[Complex<T>], kernel: &[T], result: &mut [Complex<T>])

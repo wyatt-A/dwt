@@ -1,10 +1,10 @@
 use crate::{
-    dwt::{WaveDecPlanner, WaveRecPlanner, WaveletXForm1D}, utils::w_max_level, wavelet::{Wavelet, WaveletType}
+    dwt::{w_max_level, WaveDecPlanner, WaveRecPlanner, WaveletXForm1D}, wavelet::{Wavelet, WaveletType}
 };
 use num_complex::{Complex32, Complex64, ComplexFloat};
 use num_traits::{One, Zero};
 use rayon::{
-    iter::{IndexedParallelIterator, ParallelIterator},
+    iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator},
     slice::ParallelSliceMut,
 };
 use wavelet::WaveletFilter;
@@ -55,16 +55,17 @@ fn test() {
 
 #[test]
 fn test3(){
-    let n = 10;
+    let n = 788;
     //let x:Vec<Complex64> = (1..(n+1)).into_iter().map(|x| Complex64::new(x as f64,0.)).collect();
     let x = vec![Complex64::one();n];
 
-    let x_energ = x.iter().map(|x|x.norm_sqr()).sum::<f64>();
+    // measure energy of x
+    let x_energ = x.par_iter().map(|x|x.norm_sqr()).sum::<f64>();
 
-    let wavelet = Wavelet::<f64>::new(WaveletType::Daubechies2);
+    let wavelet = Wavelet::<f64>::new(WaveletType::Daubechies10);
 
-    //let n_levels = w_max_level(x.len(), wavelet.filt_len());
-    let n_levels = 1;
+    let n_levels = w_max_level(x.len(), wavelet.filt_len());
+    //let n_levels = 1;
     println!("max levels: {}",n_levels);
 
     let mut wavedec = WaveDecPlanner::<f64>::new(n, n_levels, wavelet);
@@ -75,19 +76,27 @@ fn test3(){
 
     wavedec.process(&x, &mut result);
 
-    result.iter_mut().for_each(|x| *x = *x * 2.);
-    let result_energ = result.iter().map(|x|x.norm_sqr()).sum::<f64>();
+    // measure energy of result
+    //let w_energ = result.par_iter().map(|x|x.norm_sqr()).sum::<f64>();
 
+    //let scale = (x_energ / w_energ).sqrt();
+
+    //result.iter_mut().for_each(|x| *x = *x * scale);
+
+    let result_energ = result.par_iter().map(|x|x.norm_sqr()).sum::<f64>();
 
     waverec.process(&result, &mut recon);
 
     let max_err = recon.iter().zip(x.iter()).map(|(r,x)| (*x - *r).abs()).max_by(|a,b|a.partial_cmp(&b).unwrap()).unwrap();
+
+    let recon_energy = recon.par_iter().map(|x|x.norm_sqr()).sum::<f64>();
+
+
     println!("max error: {}",max_err);
 
     println!("x energy: {}",x_energ);
     println!("decomp energy: {}",result_energ);
-
-    println!("recon : {:#?}",result);
+    println!("recon energy: {}",recon_energy);
 
 }
 
@@ -182,8 +191,11 @@ fn test4() {
 
     println!("recon = {:#?}",recon);
 
-    
 }
+
+
+
+
 
 
 
