@@ -93,9 +93,10 @@ where
 
         let result_energy = result.par_iter().map(|x|x.norm_sqr()).sum::<T>();
 
-        let scale = (signal_energy / result_energy).sqrt();
-
-        result.par_iter_mut().for_each(|x| *x = *x * scale);
+        if !result_energy.is_zero() {
+            let scale = (signal_energy / result_energy).sqrt();
+            result.par_iter_mut().for_each(|x| *x = *x * scale);
+        }
 
         //self.decomp_buffer.clone()
     }
@@ -165,9 +166,11 @@ where
 
         let result_energy = result.par_iter().map(|x|x.norm_sqr()).sum::<T>();
 
-        let scale = (decomp_energy / result_energy).sqrt();
+        if !result_energy.is_zero() {
+            let scale = (decomp_energy / result_energy).sqrt();
+            result.par_iter_mut().for_each(|x| *x = *x * scale);
+        }
 
-        result.par_iter_mut().for_each(|x| *x = *x * scale);
     }
 }
 
