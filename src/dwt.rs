@@ -3,11 +3,12 @@ use crate::{
         conv_center, conv_direct, conv_len, conv_valid_idx, conv_valid_range, downsample2,
         symm_ext, upsample_odd,
     },
-    wavelet::{Wavelet, WaveletFilter},
+    wavelet::{Wavelet, WaveletFilter, WaveletType},
 };
-use num_complex::Complex;
+use ndarray::{s, Array3, ArrayD, Axis};
+use num_complex::{Complex, Complex32};
 use num_traits::{Float, FromPrimitive, Signed, Zero};
-use rayon::iter::{IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator};
+use rayon::iter::{IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelBridge, ParallelIterator};
 use std::{fmt::Debug, iter::Sum};
 
 pub struct WaveDecPlanner<T> {
@@ -19,6 +20,148 @@ pub struct WaveDecPlanner<T> {
     decomp_buffer: Vec<Complex<T>>,
     signal_buffer: Vec<Complex<T>>,
 }
+
+
+pub struct Decomp {
+    lo_lo_lo:Array3<Complex32>,
+    lo_lo_hi:Array3<Complex32>,
+    lo_hi_lo:Array3<Complex32>,
+    lo_hi_hi:Array3<Complex32>,
+    hi_hi_hi:Array3<Complex32>,
+    hi_hi_lo:Array3<Complex32>,
+    hi_lo_hi:Array3<Complex32>,
+    hi_lo_lo:Array3<Complex32>,
+}
+
+
+pub fn wavedec3(mut x:ArrayD<Complex32>,w:Wavelet<f32>) -> Vec<Array3<Complex32>> {
+
+    let mut dims = x.shape().to_owned();
+
+    for ax in 0..3 {
+
+        let s_len = dims[ax];
+        let wx = WaveletXForm1D::<f32>::new(s_len, w.filt_len());
+
+        let mut new_dims = dims.clone();
+        new_dims[ax] = wx.decomp_len();
+
+        let mut result_buff = ArrayD::<Complex32>::zeros(new_dims.as_slice());
+
+        x.lanes(Axis(ax)).into_iter().zip(result_buff.lanes_mut(Axis(ax))).par_bridge().for_each(|(x,mut y)|{
+            let mut wx = wx.clone();
+            let s = x.as_standard_layout().to_owned();
+            let mut r = y.as_standard_layout().to_owned();
+            wx.decompose(s.as_slice().unwrap(), w.lo_d(), w.hi_d(), r.as_slice_mut().unwrap());
+            y.assign(&r);
+        });
+
+        x = result_buff;
+
+        dims = new_dims;
+
+    }
+
+    let xd = dims[0]/2;
+    let yd = dims[1]/2;
+    let zd = dims[2]/2;
+
+    let lo_lo_lo = x.slice(s![0..xd,0..yd,0..zd]);
+    let lo_lo_hi = x.slice(s![0..xd,0..yd,zd..]);
+    let lo_hi_lo = x.slice(s![0..xd,yd..,0..zd]);
+    let lo_hi_hi = x.slice(s![0..xd,yd..,zd..]);
+
+    let hi_hi_hi = x.slice(s![xd..,yd..,zd..]);
+    let hi_hi_lo = x.slice(s![xd..,yd..,0..zd]);
+    let hi_lo_hi = x.slice(s![xd..,0..yd,zd..]);
+    let hi_lo_lo = x.slice(s![xd..,0..yd,0..zd]);
+
+
+    vec![
+        lo_lo_hi.to_owned(),
+        lo_hi_lo.to_owned(),
+        lo_hi_hi.to_owned(),
+        hi_hi_hi.to_owned(),
+        hi_hi_lo.to_owned(),
+        hi_lo_hi.to_owned(),
+        hi_lo_lo.to_owned(),
+        lo_lo_lo.to_owned(),
+    ]
+
+}
+
+
+pub fn waverec3(
+    // llh:Array3<Complex32>,
+    // lhl:Array3<Complex32>,
+    // lhh:Array3<Complex32>,
+    // hhh:Array3<Complex32>,
+    // hhl:Array3<Complex32>,
+    // hlh:Array3<Complex32>,
+    // hll:Array3<Complex32>,
+    // lll:Array3<Complex32>,
+    subbands:&[Array3<Complex32>],
+    target_dims:&[usize;3],
+    w:Wavelet<f32>) -> Array3<Complex32> {
+
+    // dec is a list of 7 arrays of the same shape
+
+    let dims = subbands[0].shape().to_owned();
+
+    let xd = dims[0];
+    let yd = dims[1];
+    let zd = dims[2];
+    let coeff_dims = [xd,yd,zd];
+    let mut input_dims = [xd*2,yd*2,zd*2];
+
+    let mut input = Array3::<Complex32>::zeros(input_dims);
+    
+    
+    input.slice_mut(s![0..xd,0..yd,zd..]).assign(&subbands[7]);
+    input.slice_mut(s![0..xd,yd..,0..zd]).assign(&subbands[6]);
+    input.slice_mut(s![0..xd,yd..,zd..]).assign(&subbands[5]);
+    input.slice_mut(s![xd..,yd..,zd..]).assign(&subbands[4]);
+    input.slice_mut(s![xd..,yd..,0..zd]).assign(&subbands[3]);
+    input.slice_mut(s![xd..,0..yd,zd..]).assign(&subbands[2]);
+    input.slice_mut(s![xd..,0..yd,0..zd]).assign(&subbands[1]);
+    input.slice_mut(s![0..xd,0..yd,0..zd]).assign(&subbands[0]);
+
+
+    for ax in 0..3 {
+        let s_len = target_dims[ax];
+        let wx = WaveletXForm1D::<f32>::new(s_len, w.filt_len());
+
+        let mut new_dims = input_dims.clone();
+        new_dims[ax] = s_len;
+
+        let mut result_buff = Array3::<Complex32>::zeros(new_dims.clone());
+
+        input.lanes(Axis(ax)).into_iter().zip(result_buff.lanes_mut(Axis(ax))).par_bridge().for_each(|(x,mut y)|{
+            let mut wx = wx.clone();
+            let s = x.as_standard_layout().to_owned();
+            let approx = &s.as_slice().unwrap()[0..coeff_dims[ax]];
+            let detail = &s.as_slice().unwrap()[coeff_dims[ax]..];
+            let mut r = y.as_standard_layout().to_owned();
+            wx.reconstruct(approx, detail, w.lo_r(), w.hi_r(), r.as_slice_mut().unwrap());
+            y.assign(&r);
+        });
+
+        input = result_buff;
+        input_dims = new_dims;
+
+    }
+
+    input
+
+}
+
+
+
+
+
+
+
+
 
 impl<T> WaveDecPlanner<T>
 where
@@ -174,6 +317,7 @@ where
     }
 }
 
+#[derive(Clone)]
 pub struct WaveletXForm1D<T> {
     /// length of filter coefficients
     filt_len: usize,

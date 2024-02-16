@@ -1,10 +1,12 @@
 use crate::{
     dwt::{w_max_level, WaveDecPlanner, WaveRecPlanner, WaveletXForm1D}, wavelet::{Wavelet, WaveletType}
 };
+use dwt::wavedec3;
+use ndarray::{ArrayD, Axis};
 use num_complex::{Complex32, Complex64, ComplexFloat};
 use num_traits::{One, Zero};
 use rayon::{
-    iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator},
+    iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelBridge, ParallelIterator},
     slice::ParallelSliceMut,
 };
 use wavelet::WaveletFilter;
@@ -13,6 +15,22 @@ use std::{f64::consts::SQRT_2, time::Instant};
 pub mod dwt;
 mod utils;
 pub mod wavelet;
+
+#[test]
+fn dec3() {
+
+
+    let dims = [50,50,50];
+    let mut x = ArrayD::<Complex32>::ones(dims.as_slice());
+    let w = Wavelet::new(WaveletType::Daubechies2);
+
+    let r = wavedec3(x,w);
+
+    
+}
+
+
+
 
 #[test]
 fn test() {
