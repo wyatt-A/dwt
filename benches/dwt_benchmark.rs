@@ -1,5 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use dwt::{dwt::{w_max_level, WaveDecPlanner, WaveRecPlanner, WaveletXForm1D}, wavelet::{Wavelet, WaveletFilter, WaveletType}};
+use dwt::{w_max_level, wavelet::{Wavelet, WaveletFilter, WaveletType}, WaveDecPlanner, WaveRecPlanner};
 use num_complex::Complex64;
 use num_traits::{One, Zero};
 
