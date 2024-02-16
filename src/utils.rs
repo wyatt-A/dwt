@@ -1,8 +1,7 @@
 use num_complex::Complex;
 use num_traits::{FromPrimitive, Signed, Zero};
-use rustfft::FftPlannerAvx;
-use std::{f64::consts::SQRT_2, fmt::Debug, ops::Range};
-
+use std::ops::Range;
+use std::fmt::Debug;
 
 /// Performs a direct convolution of the input with the kernel. The length of the result is:
 /// input.len() + kernel.len() - 1
@@ -124,54 +123,6 @@ pub fn conv_center(sig_len: usize, center_len: usize) -> (usize, usize) {
     let f = (sig_len - center_len) / 2;
     (f, f + center_len)
 }
-
-/// 1-D convolution based on the fast fourier transform. Buffers for the fft are explicitly passed and must be the same size
-/// as the result buffer. The size of the result buffer needs to be :
-///  signal.len() + filter.len() - 1
-// pub fn conv1d<T>(
-//     signal: &[T],
-//     filter: &[T],
-//     s_buff1: &mut [T],
-//     s_buff2: &mut [T],
-//     result: &mut [T],
-// ) where
-//     T: FromPrimitive + Copy + Signed + Sync + Send + Debug + 'static,
-// {
-//     let n = result.len();
-
-//     s_buff1.iter_mut().for_each(|x| *x = T::zero());
-//     s_buff2.iter_mut().for_each(|x| *x = T::zero());
-
-//     s_buff1.iter_mut().zip(signal.iter()).for_each(|(x, s)| {
-//         *x = *s;
-//     });
-
-//     s_buff2.iter_mut().zip(filter.iter()).for_each(|(x, f)| {
-//         *x = *f
-//     });
-
-//     let mut fp = FftPlannerAvx::new().unwrap();
-//     let fft = fp.plan_fft_forward(n);
-//     let ifft = fp.plan_fft_inverse(n);
-//     fft.process(s_buff1);
-//     fft.process(s_buff2);
-
-//     s_buff1
-//         .into_iter()
-//         .zip(s_buff2.into_iter())
-//         .zip(result.iter_mut())
-//         .for_each(|((x, y), r)| {
-//             *r = *x * *y;
-//         });
-
-//     ifft.process(result);
-
-//     let scale = T::one() / T::from_usize(n).unwrap();
-
-//     result.iter_mut().for_each(|x| {
-//         *x = *x * scale;
-//     })
-// }
 
 /// Retuns the length of the resulting convolution given the signal length and the filter length
 pub fn conv_len(sig_len: usize, filt_len: usize) -> usize {
