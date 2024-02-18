@@ -205,6 +205,7 @@ where
     idwt3(x, w, target_dims)
 }
 
+#[derive(Clone,Debug)]
 pub struct WaveDec3<T> {
     pub subbands: Vec<ArrayD<Complex<T>>>,
     pub signal_dims_per_level: Vec<Vec<usize>>,

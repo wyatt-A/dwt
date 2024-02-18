@@ -1,7 +1,7 @@
 use num_traits::{FromPrimitive, Signed};
 use std::fmt::Debug;
 
-#[derive(Clone)]
+#[derive(Clone,Debug)]
 pub struct Wavelet<T> {
     lo_d: Vec<T>,
     hi_d: Vec<T>,
