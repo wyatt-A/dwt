@@ -206,9 +206,9 @@ where
 }
 
 pub struct WaveDec3<T> {
-    subbands: Vec<ArrayD<Complex<T>>>,
-    signal_dims_per_level: Vec<Vec<usize>>,
-    wavelet: Wavelet<T>,
+    pub subbands: Vec<ArrayD<Complex<T>>>,
+    pub signal_dims_per_level: Vec<Vec<usize>>,
+    pub wavelet: Wavelet<T>,
 }
 
 pub fn wavedec3<T>(x: ArrayD<Complex<T>>, w: Wavelet<T>, num_levels: usize) -> WaveDec3<T>
