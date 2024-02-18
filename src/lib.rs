@@ -571,6 +571,7 @@ pub fn w_max_level(sig_len: usize, filt_len: usize) -> usize {
     (sig_len as f32 / (filt_len as f32 - 1.)).log2() as usize
 }
 
+#[cfg(test)]
 mod tests {
     use std::time::Instant;
 
