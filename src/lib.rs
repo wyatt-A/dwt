@@ -227,6 +227,27 @@ where
     decomp_dims
 }
 
+pub fn subband_sizes<T>(shape:&[usize],w:&Wavelet<T>, num_levels:usize) -> Vec<Vec<usize>>
+where
+    T: FromPrimitive + Copy + Signed + Sync + Send + Debug + 'static + Sum<T> + Float
+{
+
+    let n_subbands = i32::from(2).pow(shape.len() as u32) as usize;
+
+    let mut subband_sizes = Vec::<Vec<usize>>::with_capacity(num_levels*8);
+
+    let mut new_shape = shape.to_vec();
+    for _ in 0..num_levels {
+        let _ = subband_sizes.pop();
+        new_shape = new_shape.iter().map(|n|coeff_len(*n, w.filt_len())).collect();
+        for _ in 0..n_subbands {
+            subband_sizes.push(new_shape.clone());
+        }
+    }
+    subband_sizes
+}
+
+
 pub fn wavedec3<T>(x: ArrayD<Complex<T>>, w: Wavelet<T>, num_levels: usize) -> WaveDec3<T>
 where
     T: FromPrimitive + Copy + Signed + Sync + Send + Debug + 'static + Sum<T> + Float,
@@ -685,7 +706,16 @@ mod tests {
 
         let dd = decomp_dims(x.shape(), &w, 4);
 
-        let dec = wavedec3(x, w, 4);
+        let dec = wavedec3(x.clone(), w.clone(), 4);
+
+
+        for x in &dec.subbands {
+            println!("{:?}",x.shape());
+        }
+
+        for x in subband_sizes(x.shape(), &w, 4) {
+            println!("{:?}",x);
+        }
 
         assert_eq!(dec.signal_dims_per_level,dd);
 
