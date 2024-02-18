@@ -211,6 +211,22 @@ pub struct WaveDec3<T> {
     pub wavelet: Wavelet<T>,
 }
 
+pub fn decomp_dims<T>(shape:&[usize],w:&Wavelet<T>, num_levels:usize) -> Vec<Vec<usize>>
+where
+    T: FromPrimitive + Copy + Signed + Sync + Send + Debug + 'static + Sum<T> + Float,
+{
+    let mut decomp_dims = Vec::<Vec<usize>>::with_capacity(num_levels);
+
+    decomp_dims.push(shape.to_vec());
+
+    let mut new_shape = shape.to_vec();
+    for _ in 1..num_levels {
+        new_shape = new_shape.iter().map(|n|coeff_len(*n, w.filt_len())).collect();
+        decomp_dims.push(new_shape.clone());
+    }
+    decomp_dims
+}
+
 pub fn wavedec3<T>(x: ArrayD<Complex<T>>, w: Wavelet<T>, num_levels: usize) -> WaveDec3<T>
 where
     T: FromPrimitive + Copy + Signed + Sync + Send + Debug + 'static + Sum<T> + Float,
@@ -448,6 +464,10 @@ pub struct WaveletXForm1D<T> {
     recon_upsample_scratch: Vec<Complex<T>>,
 }
 
+pub fn coeff_len(sig_len:usize,filt_len:usize) -> usize {
+    (filt_len + sig_len - 1) / 2
+}
+
 impl<T> WaveletXForm1D<T>
 where
     T: FromPrimitive + Copy + Signed + Sync + Send + Debug + 'static,
@@ -652,6 +672,22 @@ mod tests {
 
         println!("max error: {}",max_err);
         assert!(max_err < 1E-6);
+
+    }
+
+    #[test]
+    fn decomp_size() {
+        let dims = [78,48,46];
+        let n = dims.iter().product();
+        let w = Wavelet::new(WaveletType::Daubechies3);
+        let r = rand_array(n);
+        let x = ArrayD::from_shape_vec(dims.as_slice(), r).unwrap();
+
+        let dd = decomp_dims(x.shape(), &w, 4);
+
+        let dec = wavedec3(x, w, 4);
+
+        assert_eq!(dec.signal_dims_per_level,dd);
 
     }
 
