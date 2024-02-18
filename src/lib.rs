@@ -625,7 +625,8 @@ mod tests {
 
     #[test]
     fn decomp_3d() {
-        let dims = [45,73,29];
+        //cargo test --release --package dwt --lib -- tests::decomp_3d --exact --nocapture
+        let dims = [78,48,46];
         let min_dim = *dims.iter().min().unwrap();
         let n = dims.iter().product();
 
@@ -637,9 +638,12 @@ mod tests {
 
         let n_lev = w_max_level(min_dim, w.filt_len());
 
+        println!("running decomp and recon ...");
+        let now = Instant::now();
         let dec = wavedec3(x.clone(), w, n_lev);
-
         let rec = waverec3(dec);
+        let dur = now.elapsed().as_millis();
+        println!("decomp and recon took {} ms",dur);
 
         let err = (x - rec).map(|x|x.abs());
         

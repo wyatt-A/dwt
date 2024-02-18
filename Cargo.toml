@@ -18,3 +18,6 @@ rand = "0.8.5"
 [[bench]]
 name = "dwt_benchmark"
 harness = false
+
+[profile.test]
+opt-level = 3
