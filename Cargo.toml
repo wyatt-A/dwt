@@ -13,6 +13,7 @@ rayon = "1.8.1"
 
 [dev-dependencies]
 criterion = "0.3.0"
+rand = "0.8.5"
 
 [[bench]]
 name = "dwt_benchmark"

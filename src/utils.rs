@@ -1,7 +1,7 @@
 use num_complex::Complex;
 use num_traits::{FromPrimitive, Signed, Zero};
-use std::ops::Range;
 use std::fmt::Debug;
+use std::ops::Range;
 
 /// Performs a direct convolution of the input with the kernel. The length of the result is:
 /// input.len() + kernel.len() - 1
@@ -40,7 +40,6 @@ pub fn upsample_odd<T>(sig: &[Complex<T>], upsampled: &mut [Complex<T>])
 where
     T: FromPrimitive + Copy + Signed + Sync + Send + Debug + 'static,
 {
-
     //println!("sig length: {}",sig.len());
     //println!("upsample length: {}",upsampled.len());
 
