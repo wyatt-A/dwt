@@ -7,13 +7,14 @@ edition = "2021"
 
 [dependencies]
 ndarray = { version = "0.15.6", features = ["rayon"] }
-num-complex = "0.4.4"
-num-traits = "0.2.17"
+num-complex = "0.4.5"
+num-traits = "0.2.18"
 rayon = "1.8.1"
 
 [dev-dependencies]
 criterion = "0.3.0"
 rand = "0.8.5"
+cfl = { git = "git+ssh://git@github.com:/wyatt-A/cfl.git", branch = "main" }
 
 [[bench]]
 name = "dwt_benchmark"

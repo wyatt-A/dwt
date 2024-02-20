@@ -1,7 +1,7 @@
 mod utils;
 pub mod wavelet;
 
-use ndarray::{s, ArrayD, Axis};
+use ndarray::{s, ArrayD, Axis, ShapeBuilder};
 use num_complex::{Complex, Complex32};
 use num_traits::{Float, FromPrimitive, Signed, Zero};
 use rayon::iter::{
@@ -91,7 +91,7 @@ where
         let mut new_dims = dims.clone();
         new_dims[ax] = s_len;
 
-        let mut result_buff = ArrayD::<Complex<T>>::zeros(new_dims.clone());
+        let mut result_buff = ArrayD::<Complex<T>>::zeros(new_dims.as_slice().f());
 
         x.lanes(Axis(ax))
             .into_iter()
@@ -696,6 +696,49 @@ mod tests {
         assert!(max_err < 1E-6);
 
     }
+
+
+    #[test]
+    fn dwt_identity() {
+        let x = cfl::to_array("../test_cfls/img_in",true).unwrap();
+        let w = Wavelet::new(WaveletType::Daubechies10);
+        let target_dims = x.shape().to_owned();
+        let dec = dwt3(x, w.clone());
+        let rec = idwt3(dec, w, &target_dims);
+        cfl::from_array("../test_cfls/img_out", &rec).unwrap();
+    }
+
+    #[test]
+    fn decomp_single_identity() {
+        let x = cfl::to_array("../test_cfls/img_in",true).unwrap();
+
+        let target_dims = x.shape().to_owned();
+
+        let w = Wavelet::new(WaveletType::Daubechies2);
+
+        let dec = wavedec3_single_level(x, w.clone());
+
+        let rec = waverec3_single_level(&dec, w, &target_dims);
+
+        cfl::from_array("../test_cfls/img_out", &rec).unwrap();
+
+    }
+
+
+    #[test]
+    fn decomp3_identity() {
+        let x = cfl::to_array("../test_cfls/img_in",true).unwrap();
+
+        let w = Wavelet::new(WaveletType::Daubechies2);
+
+        let dec = wavedec3(x, w, 4);
+
+        let rec = waverec3(dec);
+
+        cfl::from_array("../test_cfls/img_out", &rec).unwrap();
+
+    }
+
 
     #[test]
     fn decomp_size() {
