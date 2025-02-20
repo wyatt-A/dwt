@@ -14,7 +14,7 @@ rayon = "1.8.1"
 [dev-dependencies]
 criterion = "0.3.0"
 rand = "0.8.5"
-cfl = { git = "git+ssh://git@github.com:/wyatt-A/cfl.git", branch = "main" }
+cfl = { git = "git+ssh://git@github.com:/wyatt-A/cfl.git", branch = "main", features = ["nifti-dump"] }
 
 [[bench]]
 name = "dwt_benchmark"

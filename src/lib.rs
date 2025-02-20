@@ -1,5 +1,6 @@
 mod utils;
 pub mod wavelet;
+mod dwt3;
 
 use ndarray::{s, ArrayD, Axis, ShapeBuilder};
 use num_complex::{Complex, Complex32};
