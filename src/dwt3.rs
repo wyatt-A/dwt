@@ -161,7 +161,7 @@ fn test_dwt3_all() {
 
 /// returns the full result size of the 3D wavelet decomposition given the input size and the
 /// filter length
-fn result_size(vol_size: &[usize; 3], f_len: usize) -> [usize; 3] {
+pub fn result_size(vol_size: &[usize; 3], f_len: usize) -> [usize; 3] {
     let mut r = [0, 0, 0];
     vol_size.iter().zip(r.iter_mut()).for_each(|(&d, r)| {
         let tmp = (d + f_len - 1) / 2;
@@ -172,7 +172,7 @@ fn result_size(vol_size: &[usize; 3], f_len: usize) -> [usize; 3] {
 
 /// returns the size of the sub band given the signal length and filter length. This is the size
 /// of the approximation and detail coefficients.
-fn sub_band_size(signal_length: usize, filter_length: usize) -> usize {
+pub fn sub_band_size(signal_length: usize, filter_length: usize) -> usize {
     (signal_length + filter_length - 1) / 2
 }
 
