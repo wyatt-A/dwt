@@ -1,6 +1,6 @@
 mod utils;
 pub mod wavelet;
-mod dwt3;
+pub mod dwt3;
 mod array_utils;
 
 use ndarray::{s, ArrayD, Axis, ShapeBuilder};
