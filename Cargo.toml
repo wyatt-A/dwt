@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 ndarray = { version = "0.15.6", features = ["rayon"] }
+cfl = { git = "git+ssh://git@github.com:/wyatt-A/cfl.git", branch = "main", features = ["nifti-dump"] }
 num-complex = "0.4.5"
 num-traits = "0.2.18"
 rayon = "1.8.1"
