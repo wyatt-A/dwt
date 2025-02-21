@@ -1,6 +1,7 @@
 mod utils;
 pub mod wavelet;
 mod dwt3;
+mod array_utils;
 
 use ndarray::{s, ArrayD, Axis, ShapeBuilder};
 use num_complex::{Complex, Complex32};
@@ -206,14 +207,14 @@ where
     idwt3(x, w, target_dims)
 }
 
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 pub struct WaveDec3<T> {
     pub subbands: Vec<ArrayD<Complex<T>>>,
     pub signal_dims_per_level: Vec<Vec<usize>>,
     pub wavelet: Wavelet<T>,
 }
 
-pub fn decomp_dims<T>(shape:&[usize],w:&Wavelet<T>, num_levels:usize) -> Vec<Vec<usize>>
+pub fn decomp_dims<T>(shape: &[usize], w: &Wavelet<T>, num_levels: usize) -> Vec<Vec<usize>>
 where
     T: FromPrimitive + Copy + Signed + Sync + Send + Debug + 'static + Sum<T> + Float,
 {
@@ -223,25 +224,24 @@ where
 
     let mut new_shape = shape.to_vec();
     for _ in 1..num_levels {
-        new_shape = new_shape.iter().map(|n|coeff_len(*n, w.filt_len())).collect();
+        new_shape = new_shape.iter().map(|n| coeff_len(*n, w.filt_len())).collect();
         decomp_dims.push(new_shape.clone());
     }
     decomp_dims
 }
 
-pub fn subband_sizes<T>(shape:&[usize],w:&Wavelet<T>, num_levels:usize) -> Vec<Vec<usize>>
+pub fn subband_sizes<T>(shape: &[usize], w: &Wavelet<T>, num_levels: usize) -> Vec<Vec<usize>>
 where
-    T: FromPrimitive + Copy + Signed + Sync + Send + Debug + 'static + Sum<T> + Float
+    T: FromPrimitive + Copy + Signed + Sync + Send + Debug + 'static + Sum<T> + Float,
 {
-
     let n_subbands = i32::from(2).pow(shape.len() as u32) as usize;
 
-    let mut subband_sizes = Vec::<Vec<usize>>::with_capacity(num_levels*8);
+    let mut subband_sizes = Vec::<Vec<usize>>::with_capacity(num_levels * 8);
 
     let mut new_shape = shape.to_vec();
     for _ in 0..num_levels {
         let _ = subband_sizes.pop();
-        new_shape = new_shape.iter().map(|n|coeff_len(*n, w.filt_len())).collect();
+        new_shape = new_shape.iter().map(|n| coeff_len(*n, w.filt_len())).collect();
         for _ in 0..n_subbands {
             subband_sizes.push(new_shape.clone());
         }
@@ -487,7 +487,7 @@ pub struct WaveletXForm1D<T> {
     recon_upsample_scratch: Vec<Complex<T>>,
 }
 
-pub fn coeff_len(sig_len:usize,filt_len:usize) -> usize {
+pub fn coeff_len(sig_len: usize, filt_len: usize) -> usize {
     (filt_len + sig_len - 1) / 2
 }
 
@@ -618,14 +618,13 @@ pub fn w_max_level(sig_len: usize, filt_len: usize) -> usize {
 mod tests {
     use std::time::Instant;
 
-    use num_complex::{Complex64, ComplexFloat};
-    use num_traits::One;
-    use rayon::{iter::IndexedParallelIterator, slice::ParallelSliceMut};
+    use num_complex::ComplexFloat;
+    use rayon::iter::IndexedParallelIterator;
 
-    use rand::{self, Rng};
     use super::*;
+    use rand::{self, Rng};
 
-    fn rand_array(n:usize) -> Vec<Complex32> {
+    fn rand_array(n: usize) -> Vec<Complex32> {
         let mut rng = rand::thread_rng();
         let mut data = Vec::<Complex32>::with_capacity(n);
         for _ in 0..n {
@@ -640,12 +639,12 @@ mod tests {
     #[test]
     fn single_level_1d() {
         let x = rand_array(200);
-        
+
         let w1 = Wavelet::new(WaveletType::Daubechies2);
         let w2 = Wavelet::new(WaveletType::Daubechies3);
 
-        let mut xform1 = WaveletXForm1D::new(x.len(),w1.filt_len());
-        let mut xform2 = WaveletXForm1D::new(x.len(),w2.filt_len());
+        let mut xform1 = WaveletXForm1D::new(x.len(), w1.filt_len());
+        let mut xform2 = WaveletXForm1D::new(x.len(), w2.filt_len());
 
         let mut d1 = xform1.decomp_buffer();
         let mut d2 = xform2.decomp_buffer();
@@ -656,12 +655,12 @@ mod tests {
         let mut r1 = xform1.recon_buffer(x.len());
         let mut r2 = xform2.recon_buffer(x.len());
 
-        xform1.reconstruct(&d1[0 .. d1.len()/2],&d1[d1.len()/2 ..],w1.lo_r(), w1.hi_r(), &mut r1);
-        xform2.reconstruct(&d2[0 .. d2.len()/2],&d2[d2.len()/2 ..],w2.lo_r(), w2.hi_r(), &mut r2);
+        xform1.reconstruct(&d1[0..d1.len() / 2], &d1[d1.len() / 2..], w1.lo_r(), w1.hi_r(), &mut r1);
+        xform2.reconstruct(&d2[0..d2.len() / 2], &d2[d2.len() / 2..], w2.lo_r(), w2.hi_r(), &mut r2);
 
-        let max_err1 = r1.iter().zip(x.iter()).map(|(x,y)| (*x - *y).abs()).max_by(|x,y|x.partial_cmp(y).unwrap()).unwrap();
+        let max_err1 = r1.iter().zip(x.iter()).map(|(x, y)| (*x - *y).abs()).max_by(|x, y| x.partial_cmp(y).unwrap()).unwrap();
 
-        let max_err2 = r2.iter().zip(x.iter()).map(|(x,y)| (*x - *y).abs()).max_by(|x,y|x.partial_cmp(y).unwrap()).unwrap();
+        let max_err2 = r2.iter().zip(x.iter()).map(|(x, y)| (*x - *y).abs()).max_by(|x, y| x.partial_cmp(y).unwrap()).unwrap();
 
         assert!(max_err1 < 1E-6);
         assert!(max_err2 < 1E-6);
@@ -670,7 +669,7 @@ mod tests {
     #[test]
     fn decomp_3d() {
         //cargo test --release --package dwt --lib -- tests::decomp_3d --exact --nocapture
-        let dims = [78,48,46];
+        let dims = [78, 48, 46];
         let min_dim = *dims.iter().min().unwrap();
         let n = dims.iter().product();
 
@@ -687,21 +686,20 @@ mod tests {
         let dec = wavedec3(x.clone(), w, n_lev);
         let rec = waverec3(dec);
         let dur = now.elapsed().as_millis();
-        println!("decomp and recon took {} ms",dur);
+        println!("decomp and recon took {} ms", dur);
 
-        let err = (x - rec).map(|x|x.abs());
-        
-        let max_err = *err.iter().max_by(|x,y|x.partial_cmp(y).unwrap()).unwrap();
+        let err = (x - rec).map(|x| x.abs());
 
-        println!("max error: {}",max_err);
+        let max_err = *err.iter().max_by(|x, y| x.partial_cmp(y).unwrap()).unwrap();
+
+        println!("max error: {}", max_err);
         assert!(max_err < 1E-6);
-
     }
 
 
     #[test]
     fn dwt_identity() {
-        let x = cfl::to_array("../test_cfls/img_in",true).unwrap();
+        let x = cfl::to_array("../test_cfls/img_in", true).unwrap();
         let w = Wavelet::new(WaveletType::Daubechies10);
         let target_dims = x.shape().to_owned();
         let dec = dwt3(x, w.clone());
@@ -711,7 +709,7 @@ mod tests {
 
     #[test]
     fn decomp_single_identity() {
-        let x = cfl::to_array("../test_cfls/img_in",true).unwrap();
+        let x = cfl::to_array("../test_cfls/img_in", true).unwrap();
 
         let target_dims = x.shape().to_owned();
 
@@ -722,13 +720,12 @@ mod tests {
         let rec = waverec3_single_level(&dec, w, &target_dims);
 
         cfl::from_array("../test_cfls/img_out", &rec).unwrap();
-
     }
 
 
     #[test]
     fn decomp3_identity() {
-        let x = cfl::to_array("../test_cfls/img_in",true).unwrap();
+        let x = cfl::to_array("../test_cfls/img_in", true).unwrap();
 
         let w = Wavelet::new(WaveletType::Daubechies2);
 
@@ -737,13 +734,12 @@ mod tests {
         let rec = waverec3(dec);
 
         cfl::from_array("../test_cfls/img_out", &rec).unwrap();
-
     }
 
 
     #[test]
     fn decomp_size() {
-        let dims = [78,48,46];
+        let dims = [78, 48, 46];
         let n = dims.iter().product();
         let w = Wavelet::new(WaveletType::Daubechies3);
         let r = rand_array(n);
@@ -755,16 +751,13 @@ mod tests {
 
 
         for x in &dec.subbands {
-            println!("{:?}",x.shape());
+            println!("{:?}", x.shape());
         }
 
         for x in subband_sizes(x.shape(), &w, 4) {
-            println!("{:?}",x);
+            println!("{:?}", x);
         }
 
-        assert_eq!(dec.signal_dims_per_level,dd);
-
+        assert_eq!(dec.signal_dims_per_level, dd);
     }
-
-    
 }

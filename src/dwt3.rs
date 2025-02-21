@@ -4,16 +4,10 @@ use ndarray::{Array3, ShapeBuilder};
 use num_complex::{Complex32, ComplexFloat};
 use std::time::Instant;
 
-/// returns the size of the sub band given the signal length and filter length. This is the size
-/// of the approximation and detail coefficients.
-fn sub_band_size(signal_length: usize, filter_length: usize) -> usize {
-    (signal_length + filter_length - 1) / 2
-}
-
 #[test]
 fn test_dwt3_axis() {
     for axis in 0..3 {
-        let vol_size = [122, 125, 128];
+        let vol_size = [512, 284, 228];
         let w: Wavelet<f32> = Wavelet::new(WaveletType::Daubechies2);
 
         let mut x = Array3::<Complex32>::from_shape_fn(vol_size.f(), |(i, j, k)| Complex32::new((i + j + k) as f32, 0.0));
@@ -27,6 +21,8 @@ fn test_dwt3_axis() {
 
         let mut r = Array3::<Complex32>::zeros(decomp_size.f());
 
+        let shift = [0, 0, 0];
+
         let now = Instant::now();
         dwt3_axis(
             x.as_slice_memory_order().unwrap(),
@@ -34,18 +30,22 @@ fn test_dwt3_axis() {
             &vol_size,
             &decomp_size,
             axis,
-            &w,
+            w.lo_d(),
+            w.hi_d(),
+            &shift,
         );
 
         //cfl::dump_magnitude("x", &r.into_dyn());
 
         idwt3_axis(
-            r.as_slice_memory_order().unwrap(),
             x.as_slice_memory_order_mut().unwrap(),
+            r.as_slice_memory_order().unwrap(),
             &vol_size,
             &decomp_size,
             axis,
-            &w,
+            w.lo_r(),
+            w.hi_r(),
+            &shift,
         );
 
         let elapsed = now.elapsed();
@@ -67,6 +67,7 @@ fn test_dwt3_axis() {
 fn test_dwt3_all() {
     let input_size = [512, 256, 128];
     let mut x = Array3::<Complex32>::from_shape_fn(input_size.f(), |(i, j, k)| Complex32::new((i + j + k) as f32, 0.0));
+    let x_original = x.clone();
 
     let now = Instant::now();
     let w: Wavelet<f32> = Wavelet::new(WaveletType::Daubechies2);
@@ -78,13 +79,17 @@ fn test_dwt3_all() {
     let mut tmp2 = Array3::zeros(tmp2_size.f());
     let mut result = Array3::zeros(result_size.f());
 
+    let shift = [10, -3, 6];
+
     dwt3_axis(
         x.as_slice_memory_order().unwrap(),
         tmp1.as_slice_memory_order_mut().unwrap(),
         &input_size,
-        &result_size,
+        &tmp1_size,
         0,
-        &w,
+        w.lo_d(),
+        w.hi_d(),
+        &shift,
     );
 
     dwt3_axis(
@@ -93,7 +98,9 @@ fn test_dwt3_all() {
         &tmp1_size,
         &tmp2_size,
         1,
-        &w,
+        w.lo_d(),
+        w.hi_d(),
+        &shift,
     );
 
     dwt3_axis(
@@ -102,44 +109,58 @@ fn test_dwt3_all() {
         &tmp2_size,
         &result_size,
         2,
-        &w,
+        w.lo_d(),
+        w.hi_d(),
+        &shift,
     );
 
 
     idwt3_axis(
-        result.as_slice_memory_order().unwrap(),
         tmp2.as_slice_memory_order_mut().unwrap(),
+        result.as_slice_memory_order().unwrap(),
         &tmp2_size,
         &result_size,
         2,
-        &w,
+        w.lo_r(),
+        w.hi_r(),
+        &shift,
     );
 
     idwt3_axis(
-        tmp2.as_slice_memory_order().unwrap(),
         tmp1.as_slice_memory_order_mut().unwrap(),
+        tmp2.as_slice_memory_order().unwrap(),
         &tmp1_size,
         &tmp2_size,
         1,
-        &w,
+        w.lo_r(),
+        w.hi_r(),
+        &shift,
     );
 
     idwt3_axis(
-        tmp1.as_slice_memory_order().unwrap(),
         x.as_slice_memory_order_mut().unwrap(),
+        tmp1.as_slice_memory_order().unwrap(),
         &input_size,
         &tmp1_size,
         0,
-        &w,
+        w.lo_r(),
+        w.hi_r(),
+        &shift,
     );
 
     let elapsed = now.elapsed();
 
     println!("3D wavelet decomp took {} ms", elapsed.as_millis());
 
+    x.mapv_inplace(|x| Complex32::new(x.re.round(), x.im.round()));
+
+    assert_eq!(x, x_original);
+
     cfl::dump_magnitude("x", &x.into_dyn());
 }
 
+/// returns the full result size of the 3D wavelet decomposition given the input size and the
+/// filter length
 fn result_size(vol_size: &[usize; 3], f_len: usize) -> [usize; 3] {
     let mut r = [0, 0, 0];
     vol_size.iter().zip(r.iter_mut()).for_each(|(&d, r)| {
@@ -149,18 +170,54 @@ fn result_size(vol_size: &[usize; 3], f_len: usize) -> [usize; 3] {
     r
 }
 
+/// returns the size of the sub band given the signal length and filter length. This is the size
+/// of the approximation and detail coefficients.
+fn sub_band_size(signal_length: usize, filter_length: usize) -> usize {
+    (signal_length + filter_length - 1) / 2
+}
+
+
 //fn lane_stride(vol_size: &[usize; 3], axis: usize) -> usize {}
 
-fn dwt3_axis(vol_data: &[Complex32], decomp: &mut [Complex32], vol_size: &[usize; 3], decomp_size: &[usize; 3], axis: usize, wavelet: &Wavelet<f32>) {
+fn dwt3_axis(vol_data: &[Complex32], decomp: &mut [Complex32], vol_size: &[usize; 3], decomp_size: &[usize; 3], axis: usize, lo_d: &[f32], hi_d: &[f32], rand_shift: &[isize; 3]) {
     assert!(axis < 3, "axis out of bounds");
 
-    let lo_d = wavelet.lo_d();
-    let hi_d = wavelet.hi_d();
+    assert_eq!(
+        lo_d.len(),
+        hi_d.len(),
+        "approximation and detail filter coefficients have different lengths"
+    );
 
-    let n_coeffs = sub_band_size(vol_size[axis], wavelet.filt_len()) as i32;
+    let f_len = lo_d.len();
 
-    let f_len = wavelet.filt_len() as i32;
-    let ext_len = f_len - 1;
+    // calculate the expected size of the decomposition and check consistency with supplied decomp size
+    let mut expected_size = vol_size.to_vec();
+    expected_size[axis] = result_size(vol_size, f_len)[axis];
+    assert_eq!(
+        decomp_size,
+        expected_size.as_slice(),
+        "mismatch between expected and supplied decomposition size"
+    );
+
+    // assert that the expected size and the number of decomp coefficients is consistent
+    assert_eq!(
+        expected_size.into_iter().product::<usize>(),
+        decomp.len(),
+        "mismatch between expected and supplied decomposition buffer size"
+    );
+
+    // assert that the volume size is consistent with the number of elements in vol data
+    assert_eq!(
+        vol_size.iter().product::<usize>(),
+        vol_data.len(),
+        "mismatch between expected and supplied volume buffer size"
+    );
+
+    let n_coeffs = sub_band_size(vol_size[axis], f_len) as i32;
+
+    let f_len = f_len as i32;
+    // signal padding size for both sides of lane
+    let signal_extension_len = f_len - 1;
     let sig_len = vol_size[axis] as i32;
 
     // this is the jump to get from one signal element to the next across an axis
@@ -170,59 +227,74 @@ fn dwt3_axis(vol_data: &[Complex32], decomp: &mut [Complex32], vol_size: &[usize
     let n_lanes = num_lanes(vol_size, axis);
 
     for lane in 0..n_lanes {
+        // calculate the volume-relative lane head addresses for both source and destination.
+        // This is the starting point for the lane
         let signal_lane_head = lane_head(lane, axis, vol_size);
         let result_lane_head = lane_head(lane, axis, decomp_size);
-        for i in 0..n_coeffs {
-            let mut sa = Complex32::ZERO;
-            let mut sd = Complex32::ZERO;
-            for j in 0..f_len {
-                // calculate virtual signal index that may extend out-of-bounds
-                let virtual_idx = 2 * i - ext_len + j + 1;
-                // rationalize the index by imposing the boundary condition
-                //let signal_idx = symmetric_boundary_index(virtual_idx, sig_len);
 
-                let signal_idx = if virtual_idx >= 0 && virtual_idx < sig_len {
-                    virtual_idx as usize
-                } else if virtual_idx < 0 {
-                    (virtual_idx + 1).abs() as usize
-                } else {
-                    (2 * sig_len - virtual_idx - 1) as usize
-                };
+        // output loop for calculating coefficients
+        for i in 0..n_coeffs {
+
+            // initialize the approximation and detail coefficients to calculate
+            let mut a = Complex32::ZERO;
+            let mut d = Complex32::ZERO;
+
+            // filter coefficient loop for performing dot product
+            for j in 0..f_len {
+
+                // calculate virtual signal index to multiply with filter coefficient
+                let virtual_idx = 2 * i - signal_extension_len + j + 1;
+
+                // rectify the virtual index to a valid index by imposing symmetric boundary reflection.
+                // this is local to the lane
+                let sample_address_lane = symmetric_boundary_index(virtual_idx, sig_len);
+                // let sample_address_lane = if virtual_idx >= 0 && virtual_idx < sig_len {
+                //     virtual_idx as usize
+                // } else if virtual_idx < 0 {
+                //     (virtual_idx + 1).abs() as usize
+                // } else {
+                //     (2 * sig_len - virtual_idx - 1) as usize
+                // };
 
                 // calculate the filter index
                 let filter_idx = (f_len - j - 1) as usize;
+
+                // calculate the linear sample address to read from volume data
+                let sample_address_vol = sample_address_lane * signal_stride + signal_lane_head;
+
+                // re-calculate the sample address to account for a 3-D circular shift
+                let sample_address_vol = shift_address(sample_address_vol, vol_size, rand_shift);
+
                 // multiply signal with filter coefficient
 
-                let actual_index = signal_idx * signal_stride + signal_lane_head;
-                //todo!(convert actual index to another after some circular shift);
-                sa += lo_d[filter_idx] * vol_data[actual_index];
-                sd += hi_d[filter_idx] * vol_data[actual_index];
+                a += lo_d[filter_idx] * vol_data[sample_address_vol];
+                d += hi_d[filter_idx] * vol_data[sample_address_vol];
             }
 
             let result_index_a = i as usize * decomp_stride + result_lane_head;
             let result_index_d = (i + n_coeffs) as usize * decomp_stride + result_lane_head;
 
-            decomp[result_index_a] = sa;
-            decomp[result_index_d] = sd;
+            decomp[result_index_a] = a;
+            decomp[result_index_d] = d;
         }
     }
 }
 
-fn idwt3_axis(decomp: &[Complex32], vol: &mut [Complex32], vol_size: &[usize; 3], decomp_size: &[usize; 3], axis: usize, wavelet: &Wavelet<f32>) {
+fn idwt3_axis(vol: &mut [Complex32], decomp: &[Complex32], vol_size: &[usize; 3], decomp_size: &[usize; 3], axis: usize, lo_r: &[f32], hi_r: &[f32], rand_shift: &[isize; 3]) {
     let decomp_stride = lane_stride(decomp_size, axis);
     let signal_stride = lane_stride(vol_size, axis);
 
     let n_lanes = num_lanes(decomp_size, axis);
 
     let n_coeffs = decomp_size[axis] as i32 / 2;
-    let f_len = wavelet.filt_len() as i32;
+
+    assert_eq!(lo_r.len(), hi_r.len());
+
+    let f_len = lo_r.len() as i32;
 
     let full_len = 2 * n_coeffs + f_len - 1;        // length of full convolution
     let keep_len = 2 * n_coeffs - f_len + 2;       // how many samples we keep (centered)
     let start = (full_len - keep_len) / 2;
-
-    let lo_r = wavelet.lo_r();
-    let hi_r = wavelet.hi_r();
 
     for lane in 0..n_lanes {
         let decomp_lane_head = lane_head(lane, axis, decomp_size);
@@ -252,9 +324,12 @@ fn idwt3_axis(decomp: &[Complex32], vol: &mut [Complex32], vol_size: &[usize; 3]
                     }
                 }
             }
-            let result_idx = i as usize * signal_stride + signal_lane_head;
+            let sample_address_vol = i as usize * signal_stride + signal_lane_head;
 
-            vol[result_idx] = r;
+            // re-calculate the sample address to account for the circular shift
+            let sample_address_vol = shift_address(sample_address_vol, vol_size, rand_shift);
+
+            vol[sample_address_vol] = r;
         }
     }
 }
@@ -511,6 +586,7 @@ fn direct_nested_loops() {
     //assert_eq!(result, expected);
 }
 
+#[inline(always)]
 fn symmetric_boundary_index(index: i32, n: i32) -> usize {
     if index < 0 {
         (index + 1).abs() as usize
@@ -519,6 +595,42 @@ fn symmetric_boundary_index(index: i32, n: i32) -> usize {
     } else {
         index as usize
     }
+}
+
+// let sample_address_lane = if virtual_idx >= 0 && virtual_idx < sig_len {
+// virtual_idx as usize
+// } else if virtual_idx < 0 {
+// (virtual_idx + 1).abs() as usize
+// } else {
+// (2 * sig_len - virtual_idx - 1) as usize
+// };
+
+/// returns a new column-major address after some 3-D shift
+// #[inline]
+// fn shift_address(address: usize, vol_size: &[usize; 3], shift: &[isize; 3]) -> usize {
+//     let mut coord = index_to_subscript_col_maj3(address, vol_size);
+//     coord.iter_mut().zip(shift).zip(vol_size).for_each(|((c, &o), &l)| {
+//         *c = (*c as isize + o).checked_rem_euclid(l as isize).unwrap() as usize;
+//     });
+//     subscript_to_index_col_maj3(&coord, vol_size)
+// }
+
+#[inline] // Suggest inlining for performance
+fn shift_address(address: usize, vol_size: &[usize; 3], shift: &[isize; 3]) -> usize {
+    let nz = vol_size[0];
+    let ny = vol_size[1];
+    let nx = vol_size[2];
+
+    let z = address % nz;
+    let remainder = address / nz;
+    let y = remainder % ny;
+    let x = remainder / ny;
+
+    let new_z = ((z as isize + shift[0]).rem_euclid(nz as isize)) as usize;
+    let new_y = ((y as isize + shift[1]).rem_euclid(ny as isize)) as usize;
+    let new_x = ((x as isize + shift[2]).rem_euclid(nx as isize)) as usize;
+
+    new_z + nz * (new_y + ny * new_x)
 }
 
 #[test]
