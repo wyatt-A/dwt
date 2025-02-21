@@ -1,41 +1,66 @@
 use crate::wavelet::{Wavelet, WaveletFilter, WaveletType};
+use cfl::ndarray_stats::QuantileExt;
 use ndarray::{Array3, ShapeBuilder};
-use num_complex::Complex32;
+use num_complex::{Complex32, ComplexFloat};
 use std::time::Instant;
+
+/// returns the size of the sub band given the signal length and filter length. This is the size
+/// of the approximation and detail coefficients.
+fn sub_band_size(signal_length: usize, filter_length: usize) -> usize {
+    (signal_length + filter_length - 1) / 2
+}
 
 #[test]
 fn test_dwt3_axis() {
-    let mut x = Array3::<Complex32>::from_shape_fn((120, 120, 120).f(), |(i, _, _)| Complex32::new(i as f32, 0.0));
+    for axis in 0..3 {
+        let vol_size = [122, 125, 128];
+        let w: Wavelet<f32> = Wavelet::new(WaveletType::Daubechies2);
 
+        let mut x = Array3::<Complex32>::from_shape_fn(vol_size.f(), |(i, j, k)| Complex32::new((i + j + k) as f32, 0.0));
+        let x_original = x.clone();
 
-    let w: Wavelet<f32> = Wavelet::new(WaveletType::Daubechies2);
+        let n_coeffs_x = sub_band_size(vol_size[axis], w.filt_len());
+        let result_size_axis = 2 * n_coeffs_x;
 
-    let n_coeffs = (120 + w.filt_len() - 1) / 2;
+        let mut decomp_size = vol_size.clone();
+        decomp_size[axis] = result_size_axis;
 
-    let mut r = Array3::<Complex32>::zeros((2 * n_coeffs, 120, 120).f());
+        let mut r = Array3::<Complex32>::zeros(decomp_size.f());
 
-    let now = Instant::now();
-    dwt3_axis(
-        x.as_slice_memory_order().unwrap(),
-        r.as_slice_memory_order_mut().unwrap(),
-        &[120, 120, 120],
-        0,
-        &w,
-    );
-    let elapsed = now.elapsed();
-    println!("xform took {} ms", elapsed.as_millis());
-    //cfl::dump_magnitude("x", &r.into_dyn());
+        let now = Instant::now();
+        dwt3_axis(
+            x.as_slice_memory_order().unwrap(),
+            r.as_slice_memory_order_mut().unwrap(),
+            &vol_size,
+            &decomp_size,
+            axis,
+            &w,
+        );
 
-    idwt3_axis(
-        r.as_slice_memory_order().unwrap(),
-        x.as_slice_memory_order_mut().unwrap(),
-        &[120, 120, 120],
-        &[122, 120, 120],
-        0,
-        &w,
-    );
+        //cfl::dump_magnitude("x", &r.into_dyn());
 
-    cfl::dump_magnitude("x", &x.into_dyn());
+        idwt3_axis(
+            r.as_slice_memory_order().unwrap(),
+            x.as_slice_memory_order_mut().unwrap(),
+            &vol_size,
+            &decomp_size,
+            axis,
+            &w,
+        );
+
+        let elapsed = now.elapsed();
+        println!("xform took {} ms", elapsed.as_millis());
+
+        let diff = &x - &x_original;
+        let max_error = *diff.map(|x| x.abs()).max().unwrap();
+
+        x.mapv_inplace(|x| Complex32::new(x.re.round(), x.im.round()));
+
+        println!("max error {:?}", max_error);
+        assert_eq!(x, x_original);
+
+        //cfl::dump_magnitude("x", &x.into_dyn());
+    }
 }
 
 #[test]
@@ -57,6 +82,7 @@ fn test_dwt3_all() {
         x.as_slice_memory_order().unwrap(),
         tmp1.as_slice_memory_order_mut().unwrap(),
         &input_size,
+        &result_size,
         0,
         &w,
     );
@@ -65,6 +91,7 @@ fn test_dwt3_all() {
         tmp1.as_slice_memory_order().unwrap(),
         tmp2.as_slice_memory_order_mut().unwrap(),
         &tmp1_size,
+        &tmp2_size,
         1,
         &w,
     );
@@ -73,6 +100,7 @@ fn test_dwt3_all() {
         tmp2.as_slice_memory_order().unwrap(),
         result.as_slice_memory_order_mut().unwrap(),
         &tmp2_size,
+        &result_size,
         2,
         &w,
     );
@@ -121,59 +149,33 @@ fn result_size(vol_size: &[usize; 3], f_len: usize) -> [usize; 3] {
     r
 }
 
-fn dwt3_axis(vol_data: &[Complex32], result: &mut [Complex32], vol_size: &[usize; 3], axis: usize, wavelet: &Wavelet<f32>) {
+//fn lane_stride(vol_size: &[usize; 3], axis: usize) -> usize {}
+
+fn dwt3_axis(vol_data: &[Complex32], decomp: &mut [Complex32], vol_size: &[usize; 3], decomp_size: &[usize; 3], axis: usize, wavelet: &Wavelet<f32>) {
     assert!(axis < 3, "axis out of bounds");
 
     let lo_d = wavelet.lo_d();
     let hi_d = wavelet.hi_d();
 
+    let n_coeffs = sub_band_size(vol_size[axis], wavelet.filt_len()) as i32;
+
     let f_len = wavelet.filt_len() as i32;
+    let ext_len = f_len - 1;
     let sig_len = vol_size[axis] as i32;
 
     // this is the jump to get from one signal element to the next across an axis
-    let signal_stride = if axis == 0 {
-        1
-    } else if axis == 1 {
-        vol_size[0]
-    } else {
-        vol_size[0] * vol_size[1]
-    };
+    let signal_stride = lane_stride(vol_size, axis);
+    let decomp_stride = lane_stride(decomp_size, axis);
 
-    // this is the stride to get from one axis lane to the next
-    let (_, n_lanes) = if axis == 0 {
-        (vol_size[0], vol_size[1] * vol_size[2])
-    } else if axis == 1 {
-        (1, vol_size[0] * vol_size[2])
-    } else {
-        (vol_size[0] * vol_size[1], vol_size[0] * vol_size[1])
-    };
-
-    let n_coeffs = (sig_len + f_len - 1) / 2;
-    let ext_len = f_len as i32 - 1;
-
-    let result_size = if axis == 0 {
-        [2 * n_coeffs as usize, vol_size[1], vol_size[2]]
-    } else if axis == 1 {
-        [vol_size[0], 2 * n_coeffs as usize, vol_size[2]]
-    } else {
-        [vol_size[0], vol_size[1], 2 * n_coeffs as usize]
-    };
-
-    let result_stride = if axis == 0 {
-        1
-    } else if axis == 1 {
-        vol_size[0]
-    } else {
-        vol_size[0] * vol_size[1]
-    };
+    let n_lanes = num_lanes(vol_size, axis);
 
     for lane in 0..n_lanes {
         let signal_lane_head = lane_head(lane, axis, vol_size);
-        let result_lane_head = lane_head(lane, axis, &result_size);
-        for i in 0..n_coeffs as i32 {
+        let result_lane_head = lane_head(lane, axis, decomp_size);
+        for i in 0..n_coeffs {
             let mut sa = Complex32::ZERO;
             let mut sd = Complex32::ZERO;
-            for j in 0..f_len as i32 {
+            for j in 0..f_len {
                 // calculate virtual signal index that may extend out-of-bounds
                 let virtual_idx = 2 * i - ext_len + j + 1;
                 // rationalize the index by imposing the boundary condition
@@ -192,47 +194,32 @@ fn dwt3_axis(vol_data: &[Complex32], result: &mut [Complex32], vol_size: &[usize
                 // multiply signal with filter coefficient
 
                 let actual_index = signal_idx * signal_stride + signal_lane_head;
-
+                //todo!(convert actual index to another after some circular shift);
                 sa += lo_d[filter_idx] * vol_data[actual_index];
                 sd += hi_d[filter_idx] * vol_data[actual_index];
             }
 
-            let result_index_a = i as usize * result_stride + result_lane_head;
-            let result_index_d = (i + n_coeffs) as usize * result_stride + result_lane_head;
+            let result_index_a = i as usize * decomp_stride + result_lane_head;
+            let result_index_d = (i + n_coeffs) as usize * decomp_stride + result_lane_head;
 
-            result[result_index_a] = sa;
-            result[result_index_d] = sd;
+            decomp[result_index_a] = sa;
+            decomp[result_index_d] = sd;
         }
     }
 }
 
 fn idwt3_axis(decomp: &[Complex32], vol: &mut [Complex32], vol_size: &[usize; 3], decomp_size: &[usize; 3], axis: usize, wavelet: &Wavelet<f32>) {
-    let decomp_stride = if axis == 0 {
-        1
-    } else if axis == 1 {
-        decomp_size[0]
-    } else {
-        decomp_size[0] * decomp_size[1]
-    };
+    let decomp_stride = lane_stride(decomp_size, axis);
+    let signal_stride = lane_stride(vol_size, axis);
 
-    let signal_stride = if axis == 0 {
-        1
-    } else if axis == 1 {
-        vol_size[0]
-    } else {
-        vol_size[0] * vol_size[1]
-    };
-
-    let n_lanes = if axis == 0 {
-        decomp_size[1] * decomp_size[2]
-    } else if axis == 1 {
-        decomp_size[0] * decomp_size[2]
-    } else {
-        decomp_size[0] * decomp_size[1]
-    };
+    let n_lanes = num_lanes(decomp_size, axis);
 
     let n_coeffs = decomp_size[axis] as i32 / 2;
     let f_len = wavelet.filt_len() as i32;
+
+    let full_len = 2 * n_coeffs + f_len - 1;        // length of full convolution
+    let keep_len = 2 * n_coeffs - f_len + 2;       // how many samples we keep (centered)
+    let start = (full_len - keep_len) / 2;
 
     let lo_r = wavelet.lo_r();
     let hi_r = wavelet.hi_r();
@@ -240,17 +227,6 @@ fn idwt3_axis(decomp: &[Complex32], vol: &mut [Complex32], vol_size: &[usize; 3]
     for lane in 0..n_lanes {
         let decomp_lane_head = lane_head(lane, axis, decomp_size);
         let signal_lane_head = lane_head(lane, axis, vol_size);
-
-        //let approx = &result[0..n_coeffs as usize];
-        //let detail = &result[n_coeffs as usize..];
-
-        //let n = approx.len();
-        //let m = lo_r.len();
-        let full_len = 2 * n_coeffs + f_len - 1;        // length of full convolution
-        let keep_len = 2 * n_coeffs - f_len + 2;       // how many samples we keep (centered)
-        let start = (full_len - keep_len) / 2;
-
-        //let mut recon = vec![0.; sig_len as usize];
 
         for i in 0..vol_size[axis] as i32 {
             // c is the 'full-convolution' index we want.
@@ -277,10 +253,36 @@ fn idwt3_axis(decomp: &[Complex32], vol: &mut [Complex32], vol_size: &[usize; 3]
                 }
             }
             let result_idx = i as usize * signal_stride + signal_lane_head;
+
             vol[result_idx] = r;
         }
     }
 }
+
+/// returns the number of lanes along an axis
+fn num_lanes(vol_size: &[usize; 3], axis: usize) -> usize {
+    assert!(axis < 3);
+    if axis == 0 {
+        vol_size[1] * vol_size[2]
+    } else if axis == 1 {
+        vol_size[0] * vol_size[2]
+    } else {
+        vol_size[0] * vol_size[1]
+    }
+}
+
+/// returns the stride to jump to one element of a lane to the next
+fn lane_stride(vol_size: &[usize; 3], axis: usize) -> usize {
+    assert!(axis < 3);
+    if axis == 0 {
+        1
+    } else if axis == 1 {
+        vol_size[0]
+    } else {
+        vol_size[0] * vol_size[1]
+    }
+}
+
 
 // returns the lane head index for a given axis and volume size enumerated over all lanes
 fn lane_head(lane_idx: usize, lane_axis: usize, vol_size: &[usize; 3]) -> usize {
